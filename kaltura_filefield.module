@@ -1,0 +1,189 @@
+<?php
+
+
+/**
+ * Implementation of hook_menu()
+ */
+ function kaltura_filefield_menu() {
+    $items['admin/settings/kaltura-filefield'] = array(
+      'title' => 'Kaltura Filefield Settings',
+      'description' => t('Kaltura Field API Settings'),
+      'page callback' => 'drupal_get_form', // assuming that you want to use a form
+      'page arguments' => array('kaltura_filefield_settings'),
+      'access callback' => 'user_access',
+      'access arguments' => array('administer content types'), // or use hook_perm() to make your own
+      'type' => MENU_NORMAL_ITEM,
+      );
+    return $items;
+  }
+
+function kaltura_filefield_settings(){
+  $form = array();
+    $form['kaltura_filefield_allowed_types'] = array(
+      '#type' => 'checkboxes',
+      '#title' => t('Media Types to Post to Kaltura'),
+      '#required' => true,
+      '#description' => t('Automatically post files of these media types to the Kaltura server.'),
+      '#options' => array('audio', 'video', 'images'),
+      '#default_value' => variable_get('kaltura_filefield_allowed_types', array('audio', 'video')),
+      );
+
+    $form['kaltura_filefield_tags'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Global Tags'),
+      '#size' => 30,
+      '#required' => true,
+      '#description' => t('Apply a set of default Kaltura tags to every submitted entry (separated by commas)'),
+      '#default_value' => variable_get('kaltura_filefield_tags', FALSE)
+      );
+
+  return system_settings_form($form);
+}
+
+/**
+ * Implements filefield's hook_file_insert()
+ *
+ * @param object $file
+ *  A Drupal File object
+ *
+ * @return void
+ */
+function kaltura_filefield_file_insert(&$file) {
+  kaltura_filefield_add_file($file);
+}
+
+/**
+ * Add a Drupal file to the Kaltura Streaming Media Server
+ *
+ * @param object $file
+ *  A Drupal File object
+ *
+ * @return void
+ */
+function kaltura_filefield_add_file($file) {
+  module_load_include('php', 'kaltura', '/kaltura_client/KalturaClient');
+
+  $config = kaltura_filefield_config();
+  // Allow others to alter this config on a per-file basis
+  drupal_alter('kaltura_filefield_config', $config, $file);
+
+  if (!$type = kaltura_filefield_type($file, $config['kaltura_filefield_allowed_types'])) {
+    // Bail if this is not the media type you were looking for, move along
+    return false;
+  }
+
+  $session_user = KalturaHelpers::getSessionUser();
+  $kclient  = KalturaHelpers::getKalturaClient(TRUE);
+
+  $kconf->format = KalturaClientBase::KALTURA_SERVICE_FORMAT_PHP;
+  $token = $kclient->media->upload($file->filepath);
+  $entry = new KalturaMediaEntry();
+  $entry->tags = $config['kaltura_filefield_tags'];
+  $entry->name =  $file->filename;
+
+  // Is there a way to call the following constants with a variable or something so that
+  // I don't have to hard code them here?
+  if ($type == 'AUDIO') {
+    $entry->mediaType = KalturaMediaType::AUDIO;
+  }
+  if ($type == 'VIDEO') {
+    $entry->mediaType = KalturaMediaType::VIDEO;
+  }
+  if ($type == 'IMAGE') {
+    $entry->mediaType = KalturaMediaType::IMAGE;
+  }
+
+  $result = $kclient->media->addFromUploadedFile($entry, $token);
+  // Save a local reference to the remote Kaltura file
+  kaltura_filefield_entry_save($result->id, $file->fid);
+}
+
+/**
+ * Save a local reference to the remote Kaltura file
+ *
+ * @param string $file
+ *    A unique identifier for a Kaltura Entry
+ *
+ * @param int $fid
+ *    A drupal file identifier
+ *
+ * @return void
+ */
+function kaltura_filefield_entry_save($entry_id, $fid) {
+  db_query("INSERT INTO {kaltura_filefield} (entry_id, fid) VALUES ('%s', %d)", $entry_id, $fid);
+}
+
+/**
+ * Save a local reference to the remote Kaltura file
+ *
+ * @param string $file
+ *    A unique identifier for a Kaltura Entry
+ *
+ * @param int $fid
+ *    A drupal file identifier
+ *
+ * @return void
+ */
+function kaltura_filefield_entry_delete($file) {
+  $session_user = KalturaHelpers::getSessionUser();
+  $kaltura_client = KalturaHelpers::getKalturaClient(TRUE);
+  $media_service = new  KalturaMediaService($kaltura_client);
+  if ($entry_id = kaltura_filefield_entry_id_get($file->fid)) {
+    $result = $media_service->delete($entry_id);
+    db_query("DELETE FROM {kaltura_filefield} WHERE fid=%d", $file->fid);
+    watchdog('kaltura_filefield', 'Deleting the following entry from Kaltura: '. $entry_id);
+  }
+}
+
+/**
+ * Retrive a kaltura entry_id for a given Drupal file id
+ *
+ * @param int $fid
+ *    A drupal file identifier
+ *
+ * @return string $entry_id
+ *    A Kaltura entry unique identifier
+ */
+function kaltura_filefield_entry_id_get($fid) {
+  return db_result(db_query('SELECT entry_id FROM {kaltura_filefield} WHERE fid=%d', $fid));
+}
+
+/**
+ * Returns a Kaltura Media Type
+ *
+ * @param int $fid
+ *    A drupal file identifier
+ */
+function kaltura_filefield_type($file, $types) {
+  $mimetype = explode('/', $file->filemime);
+  if (in_array($mimetype[0], $types)){
+    return strtoupper($mimetype[0]);
+  }
+  else {
+    return false;
+  }
+}
+
+/**
+ * Returns a Kaltura Media Type
+ *
+ *
+ * @return array $config
+ *    An array of Kaltura configurations
+ */
+function kaltura_filefield_config() {
+  return array(
+    'kaltura_filefield_tags' => variable_get('kaltura_filefield_tags', FALSE),
+    'kaltura_filefield_allowed_types' => variable_get('kaltura_filefield_allowed_types', FALSE),
+    );
+}
+
+/**
+ * Implements filefield's hook_file_delete()
+ *
+ * @param object $file
+ *    A Drupal File object
+ */
+function kaltura_filefield_file_delete($file) {
+  kaltura_filefield_entry_delete($file);
+}

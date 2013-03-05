@@ -1,0 +1,6 @@
+name = Kaltura Filefield
+description = Submits files to a Kaltura Media Server
+package = Kaltura
+dependencies[] = kaltura
+core = 6.x
+
