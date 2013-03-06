@@ -24,7 +24,7 @@ function kaltura_filefield_settings(){
       '#title' => t('Media Types to Post to Kaltura'),
       '#required' => true,
       '#description' => t('Automatically post files of these media types to the Kaltura server.'),
-      '#options' => array('audio', 'video', 'images'),
+      '#options' => array('audio', 'video', 'image'),
       '#default_value' => variable_get('kaltura_filefield_allowed_types', array('audio', 'video')),
       );
 
