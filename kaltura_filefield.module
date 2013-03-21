@@ -14,19 +14,60 @@
       'access arguments' => array('administer content types'), // or use hook_perm() to make your own
       'type' => MENU_NORMAL_ITEM,
       );
+
+    $items['kaltura-filefield/notification_handler'] = array(
+      'page callback' => 'kaltura_filefile_notification', // assuming that you want to use a form
+      'access arguments' => array('access content'),
+      'type' => MENU_CALLBACK,
+      );
     return $items;
   }
 
+
+/**
+ * Notification callback for Kaltura Server
+ */
+function kaltura_filefile_notification() {
+  $admin_secret = variable_get('kaltura_admin_secret', '');
+  $params = $_POST;
+  unset($params['q']);
+  $notification = new KalturaNotificationClient($params, $admin_secret);
+  if ($notification->valid_signature === NULL) {
+    watchdog('kaltura-ff', 'notification params empty');
+    return FALSE;
+  }
+  elseif ($notification->valid_signature === FALSE) {
+    watchdog('kaltura-ff', 'notification signature not valid');
+    return FALSE;
+  }
+
+  watchdog('kf-1', serialize($params));
+
+  // Update the local status of a file
+  if ($params['not1_notification_type'] == 'entry_update') {
+    foreach ($notification->data as $data) {
+        if ($data['entry_id'] && $data['status']) {
+          kaltura_filefield_entry_update($data['entry_id'], $data['status']);
+        }
+    }
+  }
+  // Or if it has been deleted remotely, remove local references to it
+  elseif ($params['not1_notification_type'] == 'entry_delete') {
+    kaltura_filefield_entry_delete($params['not1_entry_id']);
+  }
+}
+
 function kaltura_filefield_settings(){
+
   $form = array();
-    $form['kaltura_filefield_allowed_types'] = array(
-      '#type' => 'checkboxes',
-      '#title' => t('Media Types to Post to Kaltura'),
-      '#required' => true,
-      '#description' => t('Automatically post files of these media types to the Kaltura server.'),
-      '#options' => array('audio', 'video', 'image'),
-      '#default_value' => variable_get('kaltura_filefield_allowed_types', array('audio', 'video')),
-      );
+  $form['kaltura_filefield_allowed_types'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Media Types to Post to Kaltura'),
+    '#required' => true,
+    '#description' => t('Automatically post files of these media types to the Kaltura server.'),
+    '#options' => array('audio', 'video', 'image'),
+    '#default_value' => variable_get('kaltura_filefield_allowed_types', array('audio', 'video')),
+    );
 
     $form['kaltura_filefield_tags'] = array(
       '#type' => 'textfield',
@@ -36,6 +77,42 @@ function kaltura_filefield_settings(){
       '#description' => t('Apply a set of default Kaltura tags to every submitted entry (separated by commas)'),
       '#default_value' => variable_get('kaltura_filefield_tags', FALSE)
       );
+
+    $form['kaltura_filefield_access_id'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Kaltura Access Control Profile ID'),
+      '#size' => 10,
+      '#required' => FALSE,
+      '#description' => t('Find the access control ID  in the Kaltura dashboard (kmc.kaltura.com) at Settings > Access Control. Uses "default" profile if not set here.'),
+      '#default_value' => variable_get('kaltura_filefield_access_id', FALSE)
+      );
+
+    $form['kaltura_conversion_profile_id_audio'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Kaltura Audio Conversion Profile ID'),
+      '#size' => 10,
+      '#required' => FALSE,
+      '#description' => t('Find the profile and its ID in the Kaltura dashboard (kmc.kaltura.com) at Settings > Transcoding Settings. Uses "default" profile if not set here.'),
+      '#default_value' => variable_get('kaltura_conversion_profile_id_audio', FALSE)
+     );
+
+    $form['kaltura_conversion_profile_id_video'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Kaltura Video Conversion Profile ID'),
+      '#size' => 10,
+      '#required' => FALSE,
+      '#description' => t('Find the profile and its ID in the Kaltura dashboard (kmc.kaltura.com) at Settings > Transcoding Settings. Uses "default" profile if not set here.'),
+      '#default_value' => variable_get('kaltura_conversion_profile_id_video', FALSE)
+     );
+
+    $form['kaltura_conversion_profile_id_image'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Kaltura Image Conversion Profile ID'),
+      '#size' => 10,
+      '#required' => FALSE,
+      '#description' => t('Find the profile and its ID in the Kaltura dashboard (kmc.kaltura.com) at Settings > Transcoding Settings. Uses "default" profile if not set here.'),
+      '#default_value' => variable_get('kaltura_conversion_profile_id_image', FALSE)
+     );
 
   return system_settings_form($form);
 }
@@ -81,19 +158,35 @@ function kaltura_filefield_add_file($file) {
   $entry->tags = $config['kaltura_filefield_tags'];
   $entry->name =  $file->filename;
 
+  if ($config['kaltura_filefield_access_id']) {
+    $entry->accessControlId = $config['kaltura_filefield_access_id'];
+  }
+
   // Is there a way to call the following constants with a variable or something so that
   // I don't have to hard code them here?
   if ($type == 'AUDIO') {
     $entry->mediaType = KalturaMediaType::AUDIO;
+       watchdog('kaltura_filefield', serialize($entry));
+
+    if ($config['kaltura_conversion_profile_id_audio']) {
+      $entry->conversionProfileId = $config['kaltura_conversion_profile_id_audio'];
+    }
   }
   if ($type == 'VIDEO') {
     $entry->mediaType = KalturaMediaType::VIDEO;
+    if ($config['kaltura_conversion_profile_id_video']) {
+      $entry->conversionProfileId = $config['kaltura_conversion_profile_id_video'];
+    }
   }
   if ($type == 'IMAGE') {
     $entry->mediaType = KalturaMediaType::IMAGE;
+    if ($config['kaltura_conversion_profile_id_image']) {
+      $entry->conversionProfileId = $config['kaltura_conversion_profile_id_image'];
+    }
   }
 
   $result = $kclient->media->addFromUploadedFile($entry, $token);
+
   // Save a local reference to the remote Kaltura file
   kaltura_filefield_entry_save($result->id, $file->fid);
 }
@@ -110,29 +203,31 @@ function kaltura_filefield_add_file($file) {
  * @return void
  */
 function kaltura_filefield_entry_save($entry_id, $fid) {
-  db_query("INSERT INTO {kaltura_filefield} (entry_id, fid) VALUES ('%s', %d)", $entry_id, $fid);
+  db_query("INSERT INTO {kaltura_filefield} (entry_id, fid, status) VALUES ('%s', %d, 0)", $entry_id, $fid);
 }
 
 /**
- * Save a local reference to the remote Kaltura file
+ * Update a local reference to the remote Kaltura file status
  *
- * @param string $file
+ * @param string $entry_id
  *    A unique identifier for a Kaltura Entry
- *
- * @param int $fid
- *    A drupal file identifier
  *
  * @return void
  */
-function kaltura_filefield_entry_delete($file) {
-  $session_user = KalturaHelpers::getSessionUser();
-  $kaltura_client = KalturaHelpers::getKalturaClient(TRUE);
-  $media_service = new  KalturaMediaService($kaltura_client);
-  if ($entry_id = kaltura_filefield_entry_id_get($file->fid)) {
-    $result = $media_service->delete($entry_id);
-    db_query("DELETE FROM {kaltura_filefield} WHERE fid=%d", $file->fid);
-    watchdog('kaltura_filefield', 'Deleting the following entry from Kaltura: '. $entry_id);
-  }
+function kaltura_filefield_entry_update($entry_id, $status) {
+  db_query("UPDATE {kaltura_filefield} SET status=%d  WHERE entry_id='%s'", $status, $entry_id);
+}
+
+/**
+ * Delete a local reference to the remote Kaltura file status
+ *
+ * @param string $entry_id
+ *    A unique identifier for a Kaltura Entry
+ *
+ * @return void
+ */
+function kaltura_filefield_entry_delete($entry_id) {
+  db_query("DELETE FROM {kaltura_filefield} WHERE entry_id='%s'",$entry_id);
 }
 
 /**
@@ -172,10 +267,19 @@ function kaltura_filefield_type($file, $types) {
  *    An array of Kaltura configurations
  */
 function kaltura_filefield_config() {
-  return array(
-    'kaltura_filefield_tags' => variable_get('kaltura_filefield_tags', FALSE),
-    'kaltura_filefield_allowed_types' => variable_get('kaltura_filefield_allowed_types', FALSE),
+  $configs = array();
+  $variables = array(
+    'kaltura_filefield_tags',
+    'kaltura_filefield_allowed_types',
+    'kaltura_filefield_access_id',
+    'kaltura_conversion_profile_id_audio',
+    'kaltura_conversion_profile_id_video',
+    'kaltura_conversion_profile_id_image'
     );
+  foreach ($variables as $var) {
+    $configs[$var] = variable_get($var, FALSE);
+  }
+  return $configs;
 }
 
 /**
@@ -185,5 +289,20 @@ function kaltura_filefield_config() {
  *    A Drupal File object
  */
 function kaltura_filefield_file_delete($file) {
-  kaltura_filefield_entry_delete($file);
+  $session_user = KalturaHelpers::getSessionUser();
+  $kaltura_client = KalturaHelpers::getKalturaClient(TRUE);
+  $media_service = new  KalturaMediaService($kaltura_client);
+  if ($entry_id = kaltura_filefield_entry_id_get($file->fid)) {
+    $result = $media_service->delete($entry_id);
+    kaltura_filefield_entry_delete($entry_id);
+    watchdog('kaltura_filefield', 'Deleting the following entry from Kaltura: '. $entry_id);
+  }
+}
+
+
+/*
+ * Implementation of hook_kaltura_notification_handler().
+ */
+function kaltura_filefield_kaltura_notification_handler($data) {
+  watchdog('kfield', serialize($data));
 }

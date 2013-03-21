@@ -18,6 +18,11 @@ function kaltura_filefield_schema() {
           'type' => 'int',
           'not null' => FALSE,
           ),
+        'status' => array(
+          'description' => t('Kaltura Processing Status'),
+          'type' => 'int',
+          'not null' => FALSE,
+          ),
         ),
       'primary key' => array('entry_id'),
     );
