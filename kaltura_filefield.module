@@ -33,15 +33,13 @@ function kaltura_filefile_notification() {
   unset($params['q']);
   $notification = new KalturaNotificationClient($params, $admin_secret);
   if ($notification->valid_signature === NULL) {
-    watchdog('kaltura-ff', 'notification params empty');
+    watchdog('kaltura_filefield', 'notification params empty');
     return FALSE;
   }
   elseif ($notification->valid_signature === FALSE) {
-    watchdog('kaltura-ff', 'notification signature not valid');
+    watchdog('kaltura_filefield', 'notification signature not valid');
     return FALSE;
   }
-
-  watchdog('kf-1', serialize($params));
 
   // Update the local status of a file
   if ($params['not1_notification_type'] == 'entry_update') {
@@ -298,7 +296,6 @@ function kaltura_filefield_file_delete($file) {
     watchdog('kaltura_filefield', 'Deleting the following entry from Kaltura: '. $entry_id);
   }
 }
-
 
 /*
  * Implementation of hook_kaltura_notification_handler().
