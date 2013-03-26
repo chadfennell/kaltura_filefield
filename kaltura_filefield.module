@@ -23,7 +23,6 @@
     return $items;
   }
 
-
 /**
  * Notification callback for Kaltura Server
  */
@@ -112,6 +111,15 @@ function kaltura_filefield_settings(){
       '#default_value' => variable_get('kaltura_conversion_profile_id_image', FALSE)
      );
 
+    $form['kaltura_notify_urls'] = array(
+      '#type' => 'textarea',
+      '#title' => t('Kaltura Notify These URLS (Pipe | delimited)'),
+      '#required' => FALSE,
+      '#description' => t('A pipe delimited set of URLs (e.g. Drupal instances) that you would like Kaltura to notify of entry updates.
+        This might be useful if you have a staging and/or development site that you would like to stay in sync with a production site.'),
+      '#default_value' => variable_get('kaltura_notify_urls', FALSE)
+     );
+
   return system_settings_form($form);
 }
 
@@ -155,6 +163,19 @@ function kaltura_filefield_add_file($file) {
   $entry = new KalturaMediaEntry();
   $entry->tags = $config['kaltura_filefield_tags'];
   $entry->name =  $file->filename;
+
+  // Tells our kaltura_renotify script which sites to pass the Kaltura
+  // notification updates to (The Kaltura server only allows you to set one URL
+  // to notify, so we have to repost the data ourselves to update any
+  // additional servers)
+  $urls = array(url('kaltura-filefield/notification_handler', array('absolute' => TRUE)));
+
+  // Check to see if there are other servers we need to notify
+  if ($config['kaltura_notify_urls']) {
+    $urls = array_merge($urls, explode('|', $config['kaltura_notify_urls']));
+  }
+  
+  $entry->partnerData = json_encode(array('notify' => $urls));
 
   if ($config['kaltura_filefield_access_id']) {
     $entry->accessControlId = $config['kaltura_filefield_access_id'];
@@ -267,6 +288,7 @@ function kaltura_filefield_type($file, $types) {
 function kaltura_filefield_config() {
   $configs = array();
   $variables = array(
+    'kaltura_notify_urls',
     'kaltura_filefield_tags',
     'kaltura_filefield_allowed_types',
     'kaltura_filefield_access_id',
@@ -302,4 +324,20 @@ function kaltura_filefield_file_delete($file) {
  */
 function kaltura_filefield_kaltura_notification_handler($data) {
   watchdog('kfield', serialize($data));
+}
+
+
+/**
+ * Create a unique-ish identifier for each site for use
+ *
+ * Like $site_key in _update_refresh() - returns a site-specific hash.
+  */
+function kaltura_filefield_site_hash() {
+  if (!($hash = variable_get('apachesolr_site_hash', FALSE))) {
+    global $base_url;
+    // Set a random 6 digit base-36 number as the hash.
+    $hash = substr(base_convert(sha1(uniqid($base_url, TRUE)), 16, 36), 0, 6);
+    variable_set('apachesolr_site_hash', $hash);
+  }
+  return $hash;
 }
