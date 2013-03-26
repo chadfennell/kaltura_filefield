@@ -255,6 +255,19 @@ function kaltura_filefield_entry_id_get($fid) {
 }
 
 /**
+ * Retrive a kaltura status for a given entry_id
+ *
+ * @param string $entry_id
+ *   A Kaltura entry unique identifier
+ *
+ * @return int $status
+ *   A Kaltura processing status
+ */
+function kaltura_filefield_local_status_get($entry_id) {
+  return db_result(db_query("SELECT status FROM {kaltura_filefield} WHERE entry_id='%s'", $entry_id));
+}
+
+/**
  * Returns a Kaltura Media Type
  *
  * @param int $fid
