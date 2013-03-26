@@ -14,7 +14,7 @@
       'type' => MENU_NORMAL_ITEM,
       );
 
-    $items['kaltura-filefield/notification_handler'] = array(
+    $items['kaltura-filefield/notification-handler'] = array(
       'page callback' => 'kaltura_filefile_notification', // assuming that you want to use a form
       'access arguments' => array('access content'),
       'type' => MENU_CALLBACK,
@@ -31,11 +31,11 @@ function kaltura_filefile_notification() {
   unset($params['q']);
   $notification = new KalturaNotificationClient($params, $admin_secret);
   if ($notification->valid_signature === NULL) {
-    watchdog('kaltura_filefield', 'notification params empty');
+    watchdog('kaltura_ff', 'notification params empty', array(), WATCHDOG_ERROR);
     return FALSE;
   }
   elseif ($notification->valid_signature === FALSE) {
-    watchdog('kaltura_filefield', 'notification signature not valid');
+    watchdog('kaltura_ff', 'notification signature not valid', array(), WATCHDOG_ERROR);
     return FALSE;
   }
 
@@ -68,11 +68,20 @@ function kaltura_filefield_settings(){
   $form['kaltura_filefield_tags'] = array(
     '#type' => 'textfield',
     '#title' => t('Global Tags'),
-    '#size' => 30,
+    '#size' => 50,
     '#required' => true,
     '#description' => t('Apply a set of default Kaltura tags to every submitted entry (separated by commas)'),
     '#default_value' => variable_get('kaltura_filefield_tags', FALSE)
     );
+  
+  $form['kaltura_filefield_categories'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Global Categories'),
+    '#size' => 50,
+    '#required' => true,
+    '#description' => t('Apply a set of default Kaltura categories to every submitted entry (separated by commas)'),
+    '#default_value' => variable_get('kaltura_filefield_categories', FALSE)
+    );  
 
   $form['kaltura_filefield_access_id'] = array(
     '#type' => 'textfield',
@@ -110,15 +119,6 @@ function kaltura_filefield_settings(){
     '#default_value' => variable_get('kaltura_conversion_profile_id_image', FALSE)
    );
 
-  $form['kaltura_notify_urls'] = array(
-    '#type' => 'textarea',
-    '#title' => t('Kaltura Notify These URLS (Pipe | delimited)'),
-    '#required' => FALSE,
-    '#description' => t('A pipe delimited set of URLs (e.g. Drupal instances) that you would like Kaltura to notify of entry updates.
-      This might be useful if you have a staging and/or development site that you would like to stay in sync with a production site.'),
-    '#default_value' => variable_get('kaltura_notify_urls', FALSE)
-   );
-
   return system_settings_form($form);
 }
 
@@ -153,28 +153,20 @@ function kaltura_filefield_add_file($file) {
     // Bail if this is not the media type you were looking for, move along
     return false;
   }
-
+  
   $session_user = KalturaHelpers::getSessionUser();
   $kclient  = KalturaHelpers::getKalturaClient(TRUE);
 
   $kconf->format = KalturaClientBase::KALTURA_SERVICE_FORMAT_PHP;
   $token = $kclient->media->upload($file->filepath);
   $entry = new KalturaMediaEntry();
+  $entry->categories = $config['kaltura_filefield_categories'];
   $entry->tags = $config['kaltura_filefield_tags'];
   $entry->name =  $file->filename;
 
-  // Tells our kaltura_renotify script which sites to pass the Kaltura
-  // notification updates to (The Kaltura server only allows you to set one URL
-  // to notify, so we have to repost the data ourselves to update any
-  // additional servers)
-  $urls = array(url('kaltura-filefield/notification_handler', array('absolute' => TRUE)));
-
-  // Check to see if there are other servers we need to notify
-  if ($config['kaltura_notify_urls']) {
-    $urls = array_merge($urls, explode('|', $config['kaltura_notify_urls']));
-  }
-  
-  $entry->partnerData = json_encode(array('notify' => $urls));
+  // Hang on to a URI of the originating site in case we need it down the road
+  $url = array(url('kaltura-filefield/notification-handler', array('absolute' => TRUE)));
+  $entry->partnerData = json_encode(array('origin' => $url));
 
   if ($config['kaltura_filefield_access_id']) {
     $entry->accessControlId = $config['kaltura_filefield_access_id'];
@@ -184,8 +176,6 @@ function kaltura_filefield_add_file($file) {
   // I don't have to hard code them here?
   if ($type == 'AUDIO') {
     $entry->mediaType = KalturaMediaType::AUDIO;
-       watchdog('kaltura_filefield', serialize($entry));
-
     if ($config['kaltura_conversion_profile_id_audio']) {
       $entry->conversionProfileId = $config['kaltura_conversion_profile_id_audio'];
     }
@@ -202,7 +192,8 @@ function kaltura_filefield_add_file($file) {
       $entry->conversionProfileId = $config['kaltura_conversion_profile_id_image'];
     }
   }
-
+ 
+  drupal_alter('kaltura_filefield_entry', $entry, $file);
   $result = $kclient->media->addFromUploadedFile($entry, $token);
 
   // Save a local reference to the remote Kaltura file
@@ -233,6 +224,7 @@ function kaltura_filefield_entry_save($entry_id, $fid) {
  * @return void
  */
 function kaltura_filefield_entry_update($entry_id, $status) {
+  watchdog('kaltura_ff-update', 'Updating Entry: '. $entry_id .'to the status: '. $status);
   db_query("UPDATE {kaltura_filefield} SET status=%d  WHERE entry_id='%s'", $status, $entry_id);
 }
 
@@ -245,6 +237,7 @@ function kaltura_filefield_entry_update($entry_id, $status) {
  * @return void
  */
 function kaltura_filefield_entry_delete($entry_id) {
+  watchdog('kaltura_ff-delete', 'Deleting Entry: '. $entry_id);
   db_query("DELETE FROM {kaltura_filefield} WHERE entry_id='%s'",$entry_id);
 }
 
@@ -287,7 +280,7 @@ function kaltura_filefield_type($file, $types) {
 function kaltura_filefield_config() {
   $configs = array();
   $variables = array(
-    'kaltura_notify_urls',
+    'kaltura_filefield_categories',
     'kaltura_filefield_tags',
     'kaltura_filefield_allowed_types',
     'kaltura_filefield_access_id',
@@ -314,28 +307,23 @@ function kaltura_filefield_file_delete($file) {
   if ($entry_id = kaltura_filefield_entry_id_get($file->fid)) {
     $result = $media_service->delete($entry_id);
     kaltura_filefield_entry_delete($entry_id);
-    watchdog('kaltura_filefield', 'Deleting the following entry from Kaltura: '. $entry_id);
+    watchdog('kaltura_ff-delete', 'Deleting the following entry from Kaltura: '. $entry_id);
   }
-}
-
-/*
- * Implementation of hook_kaltura_notification_handler().
- */
-function kaltura_filefield_kaltura_notification_handler($data) {
-  watchdog('kfield', serialize($data));
 }
 
 /**
  * Create a unique-ish identifier for each site for use
  *
  * Like $site_key in _update_refresh() - returns a site-specific hash.
-  */
-function kaltura_filefield_site_hash() {
-  if (!($hash = variable_get('apachesolr_site_hash', FALSE))) {
-    global $base_url;
-    // Set a random 6 digit base-36 number as the hash.
-    $hash = substr(base_convert(sha1(uniqid($base_url, TRUE)), 16, 36), 0, 6);
-    variable_set('apachesolr_site_hash', $hash);
+ */
+function ojibwe_kaltura_filefield_check_ready() {
+  $results = db_query('SELECT entry_id FROM {kaltura_filefield} WHERE status=0 LIMIT 50');
+  $session_user = KalturaHelpers::getSessionUser();
+  $kclient  = KalturaHelpers::getKalturaClient(TRUE);
+  while ($row = db_fetch_object($results)) {
+    $entry = $kclient->media->get($row->entry_id);
+    if ($status = $entry->status) {
+      kaltura_filefield_entry_update($row->entry_id, $status);
+    }
   }
-  return $hash;
 }
