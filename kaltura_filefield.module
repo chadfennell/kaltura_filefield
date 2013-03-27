@@ -3,31 +3,61 @@
 /**
  * Implementation of hook_menu()
  */
- function kaltura_filefield_menu() {
-    $items['admin/settings/kaltura-filefield'] = array(
-      'title' => 'Kaltura Filefield Settings',
-      'description' => t('Kaltura Field API Settings'),
-      'page callback' => 'drupal_get_form', // assuming that you want to use a form
-      'page arguments' => array('kaltura_filefield_settings'),
-      'access callback' => 'user_access',
-      'access arguments' => array('administer content types'), // or use hook_perm() to make your own
-      'type' => MENU_NORMAL_ITEM,
-      );
+function kaltura_filefield_menu() {
+  $items['admin/settings/kaltura-filefield'] = array(
+    'title' => 'Kaltura Filefield Settings',
+    'description' => t('Kaltura Field API Settings'),
+    'page callback' => 'drupal_get_form', // assuming that you want to use a form
+    'page arguments' => array('kaltura_filefield_settings'),
+    'access callback' => 'user_access',
+    'access arguments' => array('administer content types'), // or use hook_perm() to make your own
+    'type' => MENU_NORMAL_ITEM,
+    );
 
-    $items['kaltura-filefield/notification-handler'] = array(
-      'page callback' => 'kaltura_filefile_notification', // assuming that you want to use a form
-      'access arguments' => array('access content'),
-      'type' => MENU_CALLBACK,
-      );
-    return $items;
-  }
+  $items['kaltura-filefield/notification-handler'] = array(
+    'page callback' => 'kaltura_filefile_notification', // assuming that you want to use a form
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    );
+  return $items;
+}
 
 /**
  * Notification callback for Kaltura Server
+ *
+ * Callback to accept Kaltura Server Notifications
+ *
+ * @return void
  */
 function kaltura_filefile_notification() {
+
+  // Initialize the notification object 
+  $notification = kaltura_fielfile_notification_init($_POST);
+
+  // Update the status of or delete a local file resource
+  foreach ($notification->data as $data) {
+    if ($data['entry_id']) {
+      if ($data['notification_type'] == 'entry_update' && $data['status']) {
+        kaltura_filefield_entry_update($data['entry_id'], $data['status']);
+      } 
+      elseif ($data['notification_type'] == 'entry_delete') {
+        kaltura_filefield_entry_delete($data['entry_id']);
+      }
+    }
+  }
+}
+
+/**
+ * Authorizes Kaltura Notifications and Initializes Notifications Object
+ *
+ * @param array $params
+ *  Notification object params sent by the Kaltura server (e.g via $_POST)
+ *
+ * @return object $notification
+ *   A KalturaNotificationClient object array
+ */
+function kaltura_fielfile_notification_init($params) {
   $admin_secret = variable_get('kaltura_admin_secret', '');
-  $params = $_POST;
   unset($params['q']);
   $notification = new KalturaNotificationClient($params, $admin_secret);
   if ($notification->valid_signature === NULL) {
@@ -38,23 +68,16 @@ function kaltura_filefile_notification() {
     watchdog('kaltura_ff', 'notification signature not valid', array(), WATCHDOG_ERROR);
     return FALSE;
   }
-
-  // Update the local status of a file
-  if ($params['not1_notification_type'] == 'entry_update') {
-    foreach ($notification->data as $data) {
-        if ($data['entry_id'] && $data['status']) {
-          kaltura_filefield_entry_update($data['entry_id'], $data['status']);
-        }
-    }
-  }
-  // Or if it has been deleted remotely, remove local references to it
-  elseif ($params['not1_notification_type'] == 'entry_delete') {
-    kaltura_filefield_entry_delete($params['not1_entry_id']);
-  }
+  return $notification;
 }
 
+/**
+ * drupal_get_form page callback for Kaltura Filefield settings page
+ *
+ * @return string 
+ *   A Drupal settings HTML page
+ */
 function kaltura_filefield_settings(){
-
   $form = array();
   $form['kaltura_filefield_allowed_types'] = array(
     '#type' => 'checkboxes',
