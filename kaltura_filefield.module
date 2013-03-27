@@ -188,8 +188,8 @@ function kaltura_filefield_add_file($file) {
   $entry->name =  $file->filename;
 
   // Hang on to a URI of the originating site in case we need it down the road
-  $url = array(url('kaltura-filefield/notification-handler', array('absolute' => TRUE)));
-  $entry->partnerData = json_encode(array('origin' => $url));
+  $url = url('kaltura-filefield/notification-handler', array('absolute' => TRUE));
+  $entry->partnerData = json_encode(array('origin' => $url, 'local_id' => $file->fid));
 
   if ($config['kaltura_filefield_access_id']) {
     $entry->accessControlId = $config['kaltura_filefield_access_id'];
