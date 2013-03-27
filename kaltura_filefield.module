@@ -54,7 +54,7 @@ function kaltura_filefile_notification() {
  *  Notification object params sent by the Kaltura server (e.g via $_POST)
  *
  * @return object $notification
- *   A KalturaNotificationClient object array
+ *  A KalturaNotificationClient object array
  */
 function kaltura_fielfile_notification_init($params) {
   $admin_secret = variable_get('kaltura_admin_secret', '');
@@ -75,7 +75,7 @@ function kaltura_fielfile_notification_init($params) {
  * drupal_get_form page callback for Kaltura Filefield settings page
  *
  * @return string 
- *   A Drupal settings HTML page
+ *  A Drupal settings HTML page
  */
 function kaltura_filefield_settings(){
   $form = array();
@@ -227,10 +227,10 @@ function kaltura_filefield_add_file($file) {
  * Save a local reference to the remote Kaltura file
  *
  * @param string $file
- *    A unique identifier for a Kaltura Entry
+ *  A unique identifier for a Kaltura Entry
  *
  * @param int $fid
- *    A drupal file identifier
+ *  A drupal file identifier
  *
  * @return void
  */
@@ -242,7 +242,7 @@ function kaltura_filefield_entry_save($entry_id, $fid) {
  * Update a local reference to the remote Kaltura file status
  *
  * @param string $entry_id
- *    A unique identifier for a Kaltura Entry
+ *  A unique identifier for a Kaltura Entry
  *
  * @return void
  */
@@ -255,7 +255,7 @@ function kaltura_filefield_entry_update($entry_id, $status) {
  * Delete a local reference to the remote Kaltura file status
  *
  * @param string $entry_id
- *    A unique identifier for a Kaltura Entry
+ *  A unique identifier for a Kaltura Entry
  *
  * @return void
  */
@@ -268,10 +268,10 @@ function kaltura_filefield_entry_delete($entry_id) {
  * Retrive a kaltura entry_id for a given Drupal file id
  *
  * @param int $fid
- *    A drupal file identifier
+ *  A drupal file identifier
  *
  * @return string $entry_id
- *    A Kaltura entry unique identifier
+ *  A Kaltura entry unique identifier
  */
 function kaltura_filefield_entry_id_get($fid) {
   return db_result(db_query('SELECT entry_id FROM {kaltura_filefield} WHERE fid=%d', $fid));
@@ -281,10 +281,10 @@ function kaltura_filefield_entry_id_get($fid) {
  * Retrive a kaltura status for a given entry_id
  *
  * @param string $entry_id
- *   A Kaltura entry unique identifier
+ *  A Kaltura entry unique identifier
  *
  * @return int $status
- *   A Kaltura processing status
+ *  A Kaltura processing status
  */
 function kaltura_filefield_local_status_get($entry_id) {
   return db_result(db_query("SELECT status FROM {kaltura_filefield} WHERE entry_id='%s'", $entry_id));
@@ -294,7 +294,7 @@ function kaltura_filefield_local_status_get($entry_id) {
  * Returns a Kaltura Media Type
  *
  * @param int $fid
- *    A drupal file identifier
+ *  A drupal file identifier
  */
 function kaltura_filefield_type($file, $types) {
   $mimetype = explode('/', $file->filemime);
@@ -348,12 +348,16 @@ function kaltura_filefield_file_delete($file) {
 }
 
 /**
- * Create a unique-ish identifier for each site for use
+ * Update local Kaltura files to their remote status
  *
- * Like $site_key in _update_refresh() - returns a site-specific hash.
+ * @param int $limit
+ *  An SQL Limit for the number of entries to upload to Kaltura
+ *
+ * @return void
  */
-function ojibwe_kaltura_filefield_check_ready() {
-  $results = db_query('SELECT entry_id FROM {kaltura_filefield} WHERE status=0 LIMIT 50');
+function kaltura_filefield_update_local_status($limit = NULL) {
+  $limit = ($limit) ? $limit : 50;
+  $results = db_query('SELECT entry_id FROM {kaltura_filefield} WHERE status=0 LIMIT %d', $limit);
   $session_user = KalturaHelpers::getSessionUser();
   $kclient  = KalturaHelpers::getKalturaClient(TRUE);
   while ($row = db_fetch_object($results)) {
