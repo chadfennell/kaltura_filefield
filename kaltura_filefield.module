@@ -309,7 +309,6 @@ function kaltura_filefield_type($file, $types) {
 /**
  * Returns a Kaltura Media Type
  *
- *
  * @return array $config
  *    An array of Kaltura configurations
  */
