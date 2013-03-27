@@ -180,7 +180,6 @@ function kaltura_filefield_add_file($file) {
   $session_user = KalturaHelpers::getSessionUser();
   $kclient  = KalturaHelpers::getKalturaClient(TRUE);
 
-  $kconf->format = KalturaClientBase::KALTURA_SERVICE_FORMAT_PHP;
   $token = $kclient->media->upload($file->filepath);
   $entry = new KalturaMediaEntry();
   $entry->categories = $config['kaltura_filefield_categories'];
