@@ -299,7 +299,7 @@ function kaltura_filefield_type($file, $types) {
   $mimetype = explode('/', $file->filemime);
   $type = $mimetype[0];
   if ($types[$type]){
-    return strtoupper($types);
+    return strtoupper($type);
   }
   else {
     return false;
