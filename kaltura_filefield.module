@@ -219,7 +219,7 @@ function kaltura_filefield_add_file($file) {
   $result = $kclient->media->addFromUploadedFile($entry, $token);
 
   // Save a local reference to the remote Kaltura file
-  // kaltura_filefield_entry_save($result->id, $file->fid);
+  kaltura_filefield_entry_save($result->id, $file->fid);
 }
 
 /**
