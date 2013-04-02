@@ -84,7 +84,7 @@ function kaltura_filefield_settings(){
     '#title' => t('Media Types to Post to Kaltura'),
     '#required' => true,
     '#description' => t('Automatically post files of these media types to the Kaltura server.'),
-    '#options' => array('audio', 'video', 'image'),
+    '#options' => array('audio' => 'audio', 'video' => 'video', 'image' => 'image'),
     '#default_value' => variable_get('kaltura_filefield_allowed_types', array('audio', 'video')),
     );
 
@@ -176,7 +176,7 @@ function kaltura_filefield_add_file($file) {
     // Bail if this is not the media type you were looking for, move along
     return false;
   }
-  
+
   $session_user = KalturaHelpers::getSessionUser();
   $kclient  = KalturaHelpers::getKalturaClient(TRUE);
 
@@ -219,7 +219,7 @@ function kaltura_filefield_add_file($file) {
   $result = $kclient->media->addFromUploadedFile($entry, $token);
 
   // Save a local reference to the remote Kaltura file
-  kaltura_filefield_entry_save($result->id, $file->fid);
+  // kaltura_filefield_entry_save($result->id, $file->fid);
 }
 
 /**
@@ -297,8 +297,9 @@ function kaltura_filefield_local_status_get($entry_id) {
  */
 function kaltura_filefield_type($file, $types) {
   $mimetype = explode('/', $file->filemime);
-  if (in_array($mimetype[0], $types)){
-    return strtoupper($mimetype[0]);
+  $type = $mimetype[0];
+  if ($types[$type]){
+    return strtoupper($types);
   }
   else {
     return false;
