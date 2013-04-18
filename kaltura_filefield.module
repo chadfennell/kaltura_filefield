@@ -1,5 +1,7 @@
 <?php
 
+require_once('kaltura_filefield_field.inc');
+
 /**
  * Implementation of hook_menu()
  */
@@ -321,7 +323,8 @@ function kaltura_filefield_config() {
     'kaltura_filefield_access_id',
     'kaltura_conversion_profile_id_audio',
     'kaltura_conversion_profile_id_video',
-    'kaltura_conversion_profile_id_image'
+    'kaltura_conversion_profile_id_image',
+    'kaltura_partner_id'
     );
   foreach ($variables as $var) {
     $configs[$var] = variable_get($var, FALSE);
