@@ -80,7 +80,7 @@ function theme_kaltura_filefield_formatter_player($element) {
     $partner_id   = $config['kaltura_partner_id'];
     $embed_method = ($field['kaltura_use_thumbnail']) ? 'kWidget.thumbEmbed' : 'kWidget.embed';
     $player = 
-      "<div id=\"$entry_id\" style=\"height: 30px; width: 150px;\" class=\"clearfix kaltura-player $type player-$player_id\"></div> 
+      "<div id=\"$entry_id\" class=\"clearfix kaltura-player kaltura-player-$type player-$player_id\"></div> 
       <script src=\"http://cdnapi.kaltura.com/p/$partner_id/sp/$partner_id/embedIframeJs/uiconf_id/$player_id/partner_id/$partner_id\"></script>
       <script>
             $embed_method({
