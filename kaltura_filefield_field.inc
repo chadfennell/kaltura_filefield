@@ -73,15 +73,19 @@ function kaltura_filefield_field_formatter_info() {
 *  A cck field element array 
 */
 function theme_kaltura_filefield_formatter_player($element) {
-  $field = content_fields($element['#field_name']);
+  $field_name = $element['#field_name'];
+  $field = content_fields($field_name);
   if ($player_id = $field['kaltura_player_id']) {
     $config       = kaltura_filefield_config();
     $entry_id     = kaltura_filefield_entry_id_get($element['#item']['fid']);
+    if (!$entry_id && $element['#item']['fid']) {
+      return t('Media Forthcoming');
+    }
     $type         = $element['#type_name'];
     $partner_id   = $config['kaltura_partner_id'];
     $embed_method = ($field['kaltura_use_thumbnail']) ? 'kWidget.thumbEmbed' : 'kWidget.embed';
     $player = 
-      "<div id=\"$entry_id\" class=\"clearfix kaltura-player kaltura-player-$type player-$player_id\"></div> 
+      "<div id=\"$entry_id\" class=\"clearfix kaltura-player kaltura-player-$field_name kaltura-player-$type player-$player_id\"></div> 
       <script src=\"http://cdnapi.kaltura.com/p/$partner_id/sp/$partner_id/embedIframeJs/uiconf_id/$player_id/partner_id/$partner_id\"></script>
       <script>
             $embed_method({
