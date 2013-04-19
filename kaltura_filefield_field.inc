@@ -15,6 +15,7 @@ function kaltura_filefield_field_settings_alter(&$settings, $op, $field) {
           '#required' => FALSE,
           '#size' => '15',
           '#weight' => 0,
+          '#element_validate' => array('_element_validate_integer_positive'),          
           );
         $kaltura_use_thumbnail = ($field['kaltura_use_thumbnail']) ? $field['kaltura_use_thumbnail'] : NULL;
         $settings['kaltura_use_thumbnail'] = array(
